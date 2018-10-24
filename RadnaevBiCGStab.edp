@@ -1,0 +1,93 @@
+int n = 4;
+
+real[int, int] A(n, n);
+
+A = [
+    [1, 2, 3, 4],
+    [0, 1, 3, 5],
+    [2, 3, 1, 2],
+    [3, 2, 1, 3]
+];
+
+real[int] Xexact = [100, 0, 3, -1]; /* exact solut */
+
+real[int] b = A * Xexact;
+
+real[int] X0 = [0, 0, 0, 0]; /* first approx */
+
+real[int] X = X0; /* solution */
+
+real[int] Xprev = X0; /* solution on previout step */
+
+real[int] r = A * X0;
+r = b - r;
+real[int] rprev = r;
+
+real[int] rtilda = r;
+
+real rho = 1;
+real rhoprev = rho;
+
+real alpha = 1;
+real alphaprev = alpha;
+
+real omega = 1;
+real omegaprev = omega;
+
+real[int] v(n);
+v = 0;
+real[int] vprev = v;
+
+real[int] p(n);
+p = 0;
+real[int] pprev = p;
+
+real[int] s(n);
+real[int] t(n);
+
+real beta;
+
+func real L2(real[int]& vec) {
+    real res = 0;
+    for(int i = 0; i < vec.n; i++) {
+        res += vec[i]*vec[i];
+    }
+    return sqrt(res);
+}
+
+int iter = 0;
+real epsilon = 1e-3;
+real error = L2(r) / L2(b);
+while (error > epsilon) {
+    rho = rtilda' * rprev;
+    beta = (rho * alphaprev) / (rhoprev * omegaprev);
+
+    p = pprev - omegaprev * vprev;
+    p = beta * p; 
+    p = rprev + p;      /* p = rprev + beta * (pprev - omegaprev * vprev) */
+    
+    v = A * p;
+    
+    alpha = rho / (rtilda' * v);
+    s = rprev - alpha * v;
+    t = A * s;
+    omega = (t' * s)/(t' * t);
+    X = omega * s + alpha * p;
+    X = Xprev + X;
+    r = s - omega * t;
+    rhoprev = rho;
+    pprev = p;
+    vprev = v;
+    alphaprev = alpha;
+    Xprev = X;
+    rprev = r;
+    pprev = p;
+    omegaprev = omega;
+    cout << X << endl;
+
+    iter++;
+    error = L2(r) / L2(b);
+}
+cout << iter << endl;
+cout << X << endl;
+cout << Xexact << endl;

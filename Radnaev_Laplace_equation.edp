@@ -1,0 +1,166 @@
+/* Domain Geometry */
+real ROut = 10.0; /* Radious of outer circle */
+real RIn = ROut/2.0; /* Radious of inner circle */
+
+/* Boundary conditions */
+
+real uOut = 1.0;
+real uIn = 2.0;
+
+/* Mesh definition */
+int NN = 200;
+int NOut = NN;
+int NIn = int(RIn / ROut * NN);
+int labelIn = 1; /* Label of outer */
+int labelOut = 2; /* Label of inner */
+
+/* Inner circle border definition */
+
+border GammaIn(t = 0.0,2.0*pi){
+	x = RIn*cos(t);
+	y = RIn*sin(t);
+	label = labelIn;
+}
+
+border GammaOut(t = 0.0,2.0*pi){
+	x = ROut*cos(t);
+	y = ROut*sin(t);
+	label = labelOut;
+}
+
+//plot( GammaOut(NOut) + GammaIn(NIn));
+
+mesh Th = buildmesh( GammaOut(NOut) + GammaIn(-NIn) );
+//plot(Th);
+
+/* Finite element space definition */
+
+fespace Vh(Th, P1);
+Vh u1, u2, v;
+
+/* Bulinear form definition */
+
+varf LaplaceBilinearForm(u,v) = 
+	int2d(Th)(
+		dx(u)*dx(v) + dy(u)*dy(v)
+	)
+	+ on(labelIn, u = uIn)
+	+ on(labelOut, u = uOut);
+
+/* Linear Form definition */
+varf RhsLinearForm(u,v) = 
+	on(labelIn, u = uIn)
+	+ on(labelOut, u = uOut);
+
+matrix A = LaplaceBilinearForm(Vh, Vh, tgv = -1);
+
+real[int] b = RhsLinearForm(0, Vh, tgv = -1); /* right side of equation */
+
+/* Biconjugate gradient stabilized method */
+int n = b.n;
+
+real[int] X0(n); /* first approx */
+X0 = 3;
+
+real[int] X = X0; /* solution */
+
+real[int] Xprev = X0; /* solution on previout step */
+
+real[int] r = A * X0;
+r = b - r;
+real[int] rprev = r;
+
+real[int] rtilda = r;
+
+real rho = 1;
+real rhoprev = rho;
+
+real alpha = 1;
+real alphaprev = alpha;
+
+real omega = 1;
+real omegaprev = omega;
+
+real[int] vv(n);
+vv = 0;
+real[int] vprev = vv;
+
+real[int] p(n);
+p = 0;
+real[int] pprev = p;
+
+real[int] s(n);
+real[int] t(n);
+
+real beta;
+
+func real L2(real[int]& vec) {
+    real res = 0;
+    for(int i = 0; i < vec.n; i++) {
+        res += vec[i]*vec[i];
+    }
+    return sqrt(res);
+}
+
+int iter = 0;
+real epsilon = 1e-15;
+real error = L2(r) / L2(b);
+int maxiter = n * 2;
+real temp;
+while ((iter < maxiter) && (error > epsilon)) {
+    rho = rtilda' * rprev;
+    beta = (rho * alphaprev) / (rhoprev * omegaprev);
+
+    p = pprev - omegaprev * vprev;
+    p = beta * p; 
+    p = rprev + p;      /* p = rprev + beta * (pprev - omegaprev * vprev) */
+    
+    vv = A * p;
+
+    alpha = rho / (rtilda' * vv);
+    s = rprev - alpha * vv;
+    t = A * s;
+    omega = (t' * s)/(t' * t);
+
+    X = omega * s + alpha * p;
+    X = Xprev + X;
+    r = s - omega * t;
+    rhoprev = rho;
+    pprev = p;
+    vprev = vv;
+    alphaprev = alpha;
+    Xprev = X;
+    rprev = r;
+    pprev = p;
+    omegaprev = omega;
+
+    iter++;
+    error = L2(r) / L2(b);
+    //cout << error << endl;
+}
+
+u2[] = X;
+
+load "MUMPS_seq";
+set(A, solver = sparsesolver, eps = 1e-7);
+u1[] = A^-1*b;
+
+
+
+plot(Th, u1, fill=true, dim=2, value=1, nbiso=100, cmm="MUMPS");
+//plot(Th, u2, fill=true, dim=2, value=1, nbiso=100, cmm="BiCGStab");
+
+real c1 = (uOut - uIn) / log(ROut / RIn);
+real c2 = uOut - c1 * log(ROut);
+
+func uExactFunc = 0.5 * c1 * log(x * x + y * y) + c2;
+
+Vh uExact = uExactFunc;
+Vh u1ErrorAbs = abs(u1 - uExact);
+Vh u2ErrorAbs = abs(u2 - uExact);
+
+real u1error = sqrt(int2d(Th)(u1ErrorAbs^2));
+real u2error = sqrt(int2d(Th)(u2ErrorAbs^2));
+
+cout << "MAMPS error = " << u1error << endl;
+cout << "BiCGStab error = " << u2error << endl;
