@@ -1,0 +1,95 @@
+real ROut = 1;
+real RIn = 0.1;
+/* Initial solution */
+
+func u01 = (3) * (1 + tanh(-10*((x^2 + y^2 - RIn^2))));
+
+/* Velocity field */
+real omega = 2 * pi;
+func v1 = omega * y;
+func v2 = -omega * x;
+
+int NOut = 250;
+int NIn = int(NOut * RIn / ROut);
+int labelIn = 1;
+int labelOut = 2;
+
+border GammaOut(t = 0.0,2.0*pi) {
+ x = ROut*cos(t);
+ y = ROut*sin(t);
+ label = labelOut;
+}
+
+border GammaIn(t = 0.0,2.0*pi) {
+ x = RIn*cos(t);
+ y = RIn*sin(t);
+ label = labelIn;
+}
+
+
+mesh Th = buildmesh(GammaOut(NOut) + GammaIn(-NIn), nbvx = 10000);
+plot(Th);
+
+
+fespace Vh(Th, P2);
+
+Vh u1, u2, v, uOld1, uOld2, vel1, vel2;
+
+vel1 = v1;
+vel2 = v2;
+uOld1 = u01;
+
+real dt = 0.01;
+real t = 0;
+real tMax = 2;
+
+func f = 0;
+real mu = 0.5;
+
+vel1 = v1;
+vel2 = v2;
+uOld1 = u01;
+problem Convection1(u1, v) = 
+ int2d(Th)(u1*v)
+ -int2d(Th)(convect([v1, v2], -dt, uOld1)*v)
+ +int2d(Th)(mu * dt * (dx(u1)*dx(v) + dy(u1)*dy(v)))
+ -int2d(Th)(f * v)
+ +on(labelOut, u1 = 0)
+ +on(labelIn, u1 = u01);
+
+Convection1;
+int count = 50;
+real[int] segmX(count);
+for(int i = 0; i < count; i++)
+{
+	segmX[i] = (ROut - RIn) * i / (count - 1) + RIn; 
+}
+real k = 0;
+int j = 0;
+ofstream file("data_" + 0 + ".txt");
+for(int i = 0; i < count; i++)
+{
+    file << segmX[i] << " " << uOld1(segmX[i], 0) << endl;
+}
+
+
+
+while(t < tMax) {
+	Convection1;
+ 	u1 = 0.5 * (u1 + abs(u1));
+	uOld1 = u1;
+ 	t = t + dt; 
+ 	k = k + dt;
+ 
+ 	plot(u1, cmm="t = " + t, fill=true, dim=3, value=1, nbiso=20);
+    if(k >= tMax / 10) 
+    {   
+        j = j + 1;  
+        ofstream file("data_" + j + ".txt");
+        for(int i = 0; i < count; i++)
+        {
+            file << segmX[i] << " " << u1(segmX[i], 0) << endl;
+        }
+        k = 0;
+    }
+}
